@@ -1,3 +1,12 @@
+use rand::random;
+
+const NEIGHBOR_OFFSETS: [(i32, i32); 8] = [
+    (-1, -1), (-1, 0), (-1, 1),
+    ( 0, -1),          ( 0, 1),
+    ( 1, -1), ( 1, 0), ( 1, 1),
+];
+
+
 pub struct GameOfLife {
     width: usize,
     height: usize,
@@ -37,40 +46,25 @@ impl GameOfLife {
     }
 
     fn count_alive_neighbors(&self, x: i32, y: i32) -> usize {
-        let mut count = 0;
-        for dx in -1..=1 {
-            for dy in -1..=1 {
-                if dx == 0 && dy == 0 {
-                    continue;
-                }
-
-                if let Some(idx) = self.index(x + dx, y + dy) {
-                    if self.cells[idx] {
-                        count += 1;
-                    }
-                }
-            }
-        }
-        count
+        NEIGHBOR_OFFSETS.iter()
+            .filter_map(|(dx, dy)| self.index(x + dx, y + dy))
+            .filter(|&idx| self.cells[idx])
+            .count()
     }
 
+
     pub fn step(&mut self) {
-        // Calculate next generation
-        for y in 0..self.height {
-            for x in 0..self.width {
-                let idx = y * self.width + x;
-                let alive = self.cells[idx];
-                let neighbors = self.count_alive_neighbors(x as i32, y as i32);
-
-                self.next_cells[idx] = match (alive, neighbors) {
-                    (true, 2) | (true, 3) => true, // Stay alive
-                    (false, 3) => true,            // Born
-                    _ => false,                    // Die or stay dead
-                };
-            }
+        for (idx, &alive) in self.cells.iter().enumerate() {
+            let x = (idx % self.width) as i32;
+            let y = (idx / self.width) as i32;
+            let neighbors = self.count_alive_neighbors(x, y);
+            
+            self.next_cells[idx] = match (alive, neighbors) {
+                (true, 2) | (true, 3) => true,
+                (false, 3) => true,
+                _ => false,
+            };
         }
-
-        // Swap buffers
         std::mem::swap(&mut self.cells, &mut self.next_cells);
     }
 
