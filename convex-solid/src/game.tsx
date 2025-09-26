@@ -23,11 +23,7 @@ interface Viewport {
 }
 
 // Helper functions from terminal version
-const cellKey = (x: number, y: number): string => {
-  const key = `${x},${y}`;
-  console.log(`🔤 String created: "${key}"`);
-  return key;
-};
+const cellKey = (x: number, y: number): string => `${x},${y}`;
 
 function createWorld(cells: Cell[]): World {
   const world = new Set<string>();
@@ -65,11 +61,7 @@ function neighborCounts(world: World): Map<string, number> {
 }
 
 function nextGeneration(world: World): World {
-  console.time("neighborCounts");
   const counts = neighborCounts(world);
-  console.timeEnd("neighborCounts");
-
-  console.time("nextGeneration rules");
   const next = new Set<string>();
 
   for (const [key, count] of counts) {
@@ -77,35 +69,19 @@ function nextGeneration(world: World): World {
       next.add(key);
     }
   }
-  console.timeEnd("nextGeneration rules");
 
   return next;
 }
 
-function getViewportCells(viewport: Viewport) {
-  console.log(
-    `📱 getViewportCells() called - creating ${viewport.width}x${viewport.height} = ${viewport.width * viewport.height} objects`,
-  );
-  const cells = [];
-  for (let y = 0; y < viewport.height; y++) {
-    for (let x = 0; x < viewport.width; x++) {
-      const worldX = viewport.x + x;
-      const worldY = viewport.y + y;
-      const cellObj = {
-        x: worldX,
-        y: worldY,
-        key: cellKey(worldX, worldY),
-        screenX: x,
-        screenY: y,
-      };
-      console.log(`🏗️ Cell object created:`, cellObj);
-      cells.push(cellObj);
+// Create fixed screen positions once - never changes
+function createScreenPositions(width: number, height: number) {
+  const positions = [];
+  for (let screenY = 0; screenY < height; screenY++) {
+    for (let screenX = 0; screenX < width; screenX++) {
+      positions.push({ screenX, screenY });
     }
   }
-  console.log(
-    `✅ getViewportCells() finished - created ${cells.length} objects`,
-  );
-  return cells;
+  return positions;
 }
 
 // Pattern definitions
@@ -300,7 +276,16 @@ export const Game: Component = () => {
     zoom: 1.0,
   });
 
-  const [world, setWorld] = createSignal<World>(createCenteredPatterns(80, 40));
+  const [world, setWorld] = createSignal<World>(new Set());
+
+  // Dynamic screen positions that update with viewport
+  const screenPositions = () => {
+    objectCreationCount += viewport().width * viewport().height;
+    console.log(
+      `📱 screenPositions() called - creating ${viewport().width * viewport().height} screen position objects`,
+    );
+    return createScreenPositions(viewport().width, viewport().height);
+  };
   const [generation, setGeneration] = createSignal(0);
   const [running, setRunning] = createSignal(false);
   const [isDragging, setIsDragging] = createSignal(false);
@@ -318,12 +303,7 @@ export const Game: Component = () => {
   const [speed, setSpeed] = createSignal(500); // milliseconds between generations
   const [fps, setFps] = createSignal(0);
   const [renderTime, setRenderTime] = createSignal(0);
-  const [memoryStats, setMemoryStats] = createSignal({
-    worldSets: 0,
-    cellStrings: 0,
-    domNodes: 0,
-    memoryUsed: 0,
-  });
+  const [jsHeapUsed, setJsHeapUsed] = createSignal(0);
 
   const speedPresets = [
     { name: "Ultra Fast", value: 50 },
@@ -333,10 +313,23 @@ export const Game: Component = () => {
     { name: "Very Slow", value: 2000 },
   ];
 
-  // FPS tracking
+  // FPS and DOM tracking
   let frameCount = 0;
   let lastFpsUpdate = performance.now();
   let animationFrameId: number;
+
+  // Object creation tracking
+  let objectCreationCount = 0;
+  let renderCallCount = 0;
+
+  // Track JS heap memory
+  const updateMemoryUsage = () => {
+    if (performance.memory) {
+      setJsHeapUsed(
+        Math.round(performance.memory.usedJSHeapSize / 1024 / 1024),
+      );
+    }
+  };
 
   const trackFPS = () => {
     frameCount++;
@@ -346,60 +339,22 @@ export const Game: Component = () => {
       setFps(frameCount);
       frameCount = 0;
       lastFpsUpdate = now;
+      updateMemoryUsage();
     }
 
     animationFrameId = requestAnimationFrame(trackFPS);
   };
 
-  // Memory tracking with object churn detection
-  let totalCellObjectsCreated = 0;
-  let totalStringKeysCreated = 0;
-  let scrollCount = 0;
-
-  const trackMemory = () => {
-    // Count world references (should only be 1)
-    const worldSize = world().size;
-
-    // Count DOM nodes
-    const domNodeCount = document.getElementsByTagName("*").length;
-
-    // Get memory usage
-    let memoryUsed = 0;
-    if (performance.memory) {
-      memoryUsed = Math.round(performance.memory.usedJSHeapSize / 1024 / 1024);
-    }
-
-    // Current viewport cell count
-    const currentCellCount = viewport().width * viewport().height;
-
-    setMemoryStats({
-      worldSets: 1, // We should only have 1 world Set at a time
-      cellStrings: totalStringKeysCreated,
-      domNodes: domNodeCount,
-      memoryUsed: memoryUsed,
+  // Performance logging
+  const logPerformance = () => {
+    console.log("🔍 Performance Analysis:", {
+      jsHeapUsed: jsHeapUsed() + "MB",
+      objectCreations: objectCreationCount,
+      renderCalls: renderCallCount,
+      worldSize: world().size,
+      generation: generation(),
+      viewportSize: `${viewport().width}x${viewport().height}`,
     });
-
-    // Log memory info with object churn data
-    if (performance.memory) {
-      console.log("🔍 Memory Analysis:", {
-        used: memoryUsed + "MB",
-        total:
-          Math.round(performance.memory.totalJSHeapSize / 1024 / 1024) + "MB",
-        domNodes: domNodeCount,
-        worldSize: worldSize,
-        generation: generation(),
-        "📊 Object Churn": {
-          scrollCount: scrollCount,
-          totalCellObjectsCreated: totalCellObjectsCreated,
-          totalStringKeysCreated: totalStringKeysCreated,
-          currentViewportCells: currentCellCount,
-          objectsPerScroll:
-            scrollCount > 0
-              ? Math.round(totalCellObjectsCreated / scrollCount)
-              : 0,
-        },
-      });
-    }
   };
 
   let gameInterval: number;
@@ -419,7 +374,10 @@ export const Game: Component = () => {
 
   createEffect(() => {
     updateViewportSize();
-    // Re-center patterns when viewport changes
+  });
+
+  // Initialize world after viewport is set
+  createEffect(() => {
     if (world().size === 0) {
       setWorld(createCenteredPatterns(viewport().width, viewport().height));
     }
@@ -435,42 +393,9 @@ export const Game: Component = () => {
     }
   });
 
-  const cells = () => {
-    console.log(
-      `🔄 cells() function called - about to call getViewportCells()`,
-    );
-    const start = performance.now();
-    const result = getViewportCells(viewport());
-    const end = performance.now();
-    console.log(`⏱️ getViewportCells took ${end - start}ms`);
-
-    setRenderTime(Math.round((end - start) * 100) / 100);
-    console.log(
-      `📊 setRenderTime called with ${Math.round((end - start) * 100) / 100}ms`,
-    );
-
-    // Track object creation for memory analysis
-    const cellCount = result.length;
-    totalCellObjectsCreated += cellCount;
-    totalStringKeysCreated += cellCount; // Each cell creates a key string
-    console.log(`📈 Total objects created so far: ${totalCellObjectsCreated}`);
-
-    // Track memory every 10 generations OR when significant object creation
-    if (
-      generation() % 10 === 0 ||
-      totalCellObjectsCreated % 10000 < cellCount
-    ) {
-      trackMemory();
-    }
-
-    console.log(`✅ cells() function returning ${result.length} cells`);
-    return result;
-  };
-
   const panViewport = (dx: number, dy: number) => {
-    scrollCount++;
     console.log(
-      `🔄 Scroll #${scrollCount} - About to create ${viewport().width * viewport().height} new cell objects`,
+      `🔄 Scroll - viewport position changing from (${viewport().x}, ${viewport().y}) to (${viewport().x + dx}, ${viewport().y + dy})`,
     );
 
     setViewport((prev) => ({
@@ -481,14 +406,14 @@ export const Game: Component = () => {
   };
 
   const tick = () => {
-    console.time("Game Logic");
     const newWorld = nextGeneration(world());
-    console.timeEnd("Game Logic");
-
-    console.time("Set World State");
     setWorld(newWorld);
     setGeneration((prev) => prev + 1);
-    console.timeEnd("Set World State");
+
+    // Log performance every 10 generations
+    if (generation() % 10 === 0) {
+      logPerformance();
+    }
   };
 
   const toggleRunning = () => {
@@ -613,14 +538,8 @@ export const Game: Component = () => {
           {viewport().height} = {viewport().width * viewport().height}
         </div>
         <div class="text-xs text-blue-600 mb-2">
-          Memory: {memoryStats().memoryUsed}MB | DOM: {memoryStats().domNodes} |
-          Objects Created: {totalCellObjectsCreated.toLocaleString()}
-        </div>
-        <div class="text-xs text-orange-600 mb-2">
-          🔍 Scrolls: {scrollCount} | Avg Objects/Scroll:{" "}
-          {scrollCount > 0
-            ? Math.round(totalCellObjectsCreated / scrollCount).toLocaleString()
-            : 0}
+          Memory: {jsHeapUsed()}MB | Objects Created:{" "}
+          {objectCreationCount.toLocaleString()} | Renders: {renderCallCount}
         </div>
 
         <div class="flex items-center gap-4 mb-2">
@@ -696,24 +615,20 @@ export const Game: Component = () => {
         }}
         onMouseDown={handleMouseDown}
       >
-        <For each={cells()} fallback={<div>Loading...</div>}>
-          {(cell) => {
-            console.log(`🎨 Rendering cell: (${cell.x}, ${cell.y})`);
-            return (
-              <div
-                key={cell.key}
-                class={`w-5 h-5 cursor-pointer transition-colors duration-100 border-[0.5px] ${
-                  world().has(cell.key)
-                    ? "bg-black border-gray-400 hover:bg-gray-800"
-                    : "bg-white border-gray-200 hover:bg-gray-100"
-                }`}
-                onClick={(e) => toggleCell(cell.x, cell.y, e)}
-                onMouseDown={handleMouseDown}
-                title={`(${cell.x}, ${cell.y})`}
-              />
-            );
-          }}
-        </For>
+        {Array.from({ length: viewport().height }, (_, y) =>
+          Array.from({ length: viewport().width }, (_, x) => (
+            <div
+              class={`w-5 h-5 cursor-pointer transition-colors duration-100 border-[0.5px] ${
+                world().has(cellKey(viewport().x + x, viewport().y + y))
+                  ? "bg-black border-gray-400 hover:bg-gray-800"
+                  : "bg-white border-gray-200 hover:bg-gray-100"
+              }`}
+              onClick={(e) => toggleCell(viewport().x + x, viewport().y + y, e)}
+              onMouseDown={handleMouseDown}
+              title={`(${viewport().x + x}, ${viewport().y + y})`}
+            />
+          )),
+        )}
       </div>
     </div>
   );
