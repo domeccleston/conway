@@ -3,7 +3,7 @@ import { createSignal, For, onMount, onCleanup, createEffect } from "solid-js";
 
 // Types from our terminal version
 type Cell = [number, number];
-type World = Set<string>;
+type World = Set<number>;
 
 // Pattern types
 interface Pattern {
@@ -23,10 +23,13 @@ interface Viewport {
 }
 
 // Helper functions from terminal version
-const cellKey = (x: number, y: number): string => `${x},${y}`;
+const cellKey = (x: number, y: number): number => (x << 16) | (y & 0xffff);
+
+// Unpack function for debugging (optional)
+const unpackKey = (key: number): [number, number] => [key >> 16, key & 0xffff];
 
 function createWorld(cells: Cell[]): World {
-  const world = new Set<string>();
+  const world = new Set<number>();
   for (const [x, y] of cells) {
     world.add(cellKey(x, y));
   }
@@ -46,11 +49,11 @@ function neighbors([x, y]: Cell): Cell[] {
   ] as Cell[];
 }
 
-function neighborCounts(world: World): Map<string, number> {
-  const counts = new Map<string, number>();
+function neighborCounts(world: World): Map<number, number> {
+  const counts = new Map<number, number>();
 
-  for (const cellKeyStr of world) {
-    const [x, y] = cellKeyStr.split(",").map(Number) as Cell;
+  for (const packedCell of world) {
+    const [x, y] = unpackKey(packedCell);
     for (const [nx, ny] of neighbors([x, y])) {
       const key = cellKey(nx, ny);
       counts.set(key, (counts.get(key) || 0) + 1);
@@ -62,7 +65,7 @@ function neighborCounts(world: World): Map<string, number> {
 
 function nextGeneration(world: World): World {
   const counts = neighborCounts(world);
-  const next = new Set<string>();
+  const next = new Set<number>();
 
   for (const [key, count] of counts) {
     if (count === 3 || (count === 2 && world.has(key))) {
@@ -276,7 +279,7 @@ export const Game: Component = () => {
     zoom: 1.0,
   });
 
-  const [world, setWorld] = createSignal<World>(new Set());
+  const [world, setWorld] = createSignal<World>(new Set<number>());
 
   // Dynamic screen positions that update with viewport
   const screenPositions = () => {
