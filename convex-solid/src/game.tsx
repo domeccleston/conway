@@ -83,17 +83,6 @@ function nextGeneration(world: World): World {
   return next;
 }
 
-// Create fixed screen positions once - never changes
-function createScreenPositions(width: number, height: number) {
-  const positions = [];
-  for (let screenY = 0; screenY < height; screenY++) {
-    for (let screenX = 0; screenX < width; screenX++) {
-      positions.push({ screenX, screenY });
-    }
-  }
-  return positions;
-}
-
 // Pattern definitions
 const patterns: Pattern[] = [
   {
@@ -523,14 +512,24 @@ export const Game: Component = () => {
     e.preventDefault();
   };
 
+  // 4. Add this variable near your other variables (before the component):
+  let lastViewportUpdate = 0;
+
+  // 5. Replace the handleMouseMove function with this:
   const handleMouseMove = (e: MouseEvent) => {
     if (!isDragging()) return;
+
+    // Throttle to ~60fps max
+    const now = performance.now();
+
+    if (now - lastViewportUpdate < 16) return;
+    lastViewportUpdate = now;
 
     const dx = e.clientX - dragStart().x;
     const dy = e.clientY - dragStart().y;
 
     // Convert pixel movement to cell movement
-    const cellDx = -Math.floor(dx / 20); // 20px per cell, negative for natural drag direction
+    const cellDx = -Math.floor(dx / 20);
     const cellDy = -Math.floor(dy / 20);
 
     setViewport((prev) => ({
