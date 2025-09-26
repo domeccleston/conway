@@ -1,5 +1,5 @@
 import type { Component } from "solid-js";
-import { createSignal, For, onMount, onCleanup } from "solid-js";
+import { createSignal, For, onMount, onCleanup, createEffect } from "solid-js";
 
 // Types from our terminal version
 type Cell = [number, number];
@@ -22,6 +22,46 @@ function createWorld(cells: Cell[]): World {
     world.add(cellKey(x, y));
   }
   return world;
+}
+
+function neighbors([x, y]: Cell): Cell[] {
+  return [
+    [x - 1, y - 1],
+    [x, y - 1],
+    [x + 1, y - 1],
+    [x - 1, y],
+    [x + 1, y],
+    [x - 1, y + 1],
+    [x, y + 1],
+    [x + 1, y + 1],
+  ] as Cell[];
+}
+
+function neighborCounts(world: World): Map<string, number> {
+  const counts = new Map<string, number>();
+
+  for (const cellKeyStr of world) {
+    const [x, y] = cellKeyStr.split(",").map(Number) as Cell;
+    for (const [nx, ny] of neighbors([x, y])) {
+      const key = cellKey(nx, ny);
+      counts.set(key, (counts.get(key) || 0) + 1);
+    }
+  }
+
+  return counts;
+}
+
+function nextGeneration(world: World): World {
+  const counts = neighborCounts(world);
+  const next = new Set<string>();
+
+  for (const [key, count] of counts) {
+    if (count === 3 || (count === 2 && world.has(key))) {
+      next.add(key);
+    }
+  }
+
+  return next;
 }
 
 function getViewportCells(viewport: Viewport) {
@@ -64,9 +104,38 @@ export const Game: Component = () => {
   const [viewport, setViewport] = createSignal<Viewport>({
     x: 0,
     y: 0,
-    width: 20,
-    height: 15,
+    width: 80,
+    height: 40,
     zoom: 1.0,
+  });
+  const [generation, setGeneration] = createSignal(0);
+  const [running, setRunning] = createSignal(false);
+  const [isDragging, setIsDragging] = createSignal(false);
+  const [dragStart, setDragStart] = createSignal({
+    x: 0,
+    y: 0,
+    viewportX: 0,
+    viewportY: 0,
+  });
+
+  let gameInterval: number;
+
+  // Calculate viewport size based on window size
+  const updateViewportSize = () => {
+    const cellSize = 16; // px
+    const headerHeight = 120; // approximate height of header
+    const width = Math.floor((window.innerWidth - 40) / cellSize); // 40px for padding
+    const height = Math.floor((window.innerHeight - headerHeight) / cellSize);
+
+    setViewport((prev) => ({
+      ...prev,
+      width,
+      height,
+    }));
+  };
+
+  createEffect(() => {
+    updateViewportSize();
   });
 
   const cells = () => getViewportCells(viewport());
@@ -77,6 +146,22 @@ export const Game: Component = () => {
       x: prev.x + dx,
       y: prev.y + dy,
     }));
+  };
+
+  const tick = () => {
+    setWorld(nextGeneration);
+    setGeneration((prev) => prev + 1);
+  };
+
+  const toggleRunning = () => {
+    const isRunning = !running();
+    setRunning(isRunning);
+
+    if (isRunning) {
+      gameInterval = setInterval(tick, 500);
+    } else {
+      clearInterval(gameInterval);
+    }
   };
 
   const handleKeyDown = (e: KeyboardEvent) => {
@@ -97,18 +182,36 @@ export const Game: Component = () => {
         panViewport(3, 0);
         e.preventDefault();
         break;
+      case " ":
+        tick();
+        e.preventDefault();
+        break;
+      case "r":
+        toggleRunning();
+        e.preventDefault();
+        break;
     }
   };
 
   onMount(() => {
     document.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("resize", updateViewportSize);
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", handleMouseUp);
+    updateViewportSize();
   });
 
   onCleanup(() => {
     document.removeEventListener("keydown", handleKeyDown);
+    window.removeEventListener("resize", updateViewportSize);
+    document.removeEventListener("mousemove", handleMouseMove);
+    document.removeEventListener("mouseup", handleMouseUp);
+    clearInterval(gameInterval);
   });
 
-  const toggleCell = (worldX: number, worldY: number) => {
+  const toggleCell = (worldX: number, worldY: number, e?: MouseEvent) => {
+    if (isDragging()) return; // Don't toggle if we're dragging
+
     const key = cellKey(worldX, worldY);
     const newWorld = new Set(world());
     if (newWorld.has(key)) {
@@ -119,42 +222,78 @@ export const Game: Component = () => {
     setWorld(newWorld);
   };
 
+  const handleMouseDown = (e: MouseEvent) => {
+    setIsDragging(true);
+    setDragStart({
+      x: e.clientX,
+      y: e.clientY,
+      viewportX: viewport().x,
+      viewportY: viewport().y,
+    });
+    e.preventDefault();
+  };
+
+  const handleMouseMove = (e: MouseEvent) => {
+    if (!isDragging()) return;
+
+    const dx = e.clientX - dragStart().x;
+    const dy = e.clientY - dragStart().y;
+
+    // Convert pixel movement to cell movement
+    const cellDx = -Math.floor(dx / 16); // 16px per cell, negative for natural drag direction
+    const cellDy = -Math.floor(dy / 16);
+
+    setViewport((prev) => ({
+      ...prev,
+      x: dragStart().viewportX + cellDx,
+      y: dragStart().viewportY + cellDy,
+    }));
+  };
+
+  const handleMouseUp = () => {
+    setIsDragging(false);
+  };
+
   return (
-    <div class="p-4 bg-gray-900 text-white min-h-screen">
-      <div class="mb-4">
+    <div class="bg-gray-900 text-white h-screen overflow-hidden">
+      <div class="p-4">
         <h1 class="text-2xl font-bold mb-2">Game of Life</h1>
         <div class="text-sm text-gray-300">
-          Population: {world().size} | Viewport: ({viewport().x}, {viewport().y}
-          ) | Zoom: {viewport().zoom}x
+          Population: {world().size} | Generation: {generation()} | Viewport: (
+          {viewport().x}, {viewport().y}) {viewport().width}x{viewport().height}{" "}
+          | Zoom: {viewport().zoom}x |{running() ? "RUNNING" : "PAUSED"}
         </div>
         <div class="text-xs text-gray-400 mt-1">
-          Click cells to toggle | Use WASD to pan
+          Click cells to toggle | Shift + drag to pan | WASD = pan | SPACE =
+          step | R = run/pause
         </div>
       </div>
 
-      <div
-        class="inline-grid border border-gray-600 bg-gray-800 gap-px"
-        style={{
-          "grid-template-columns": `repeat(${viewport().width}, 24px)`,
-        }}
-      >
-        <For each={cells()}>
-          {(cell) => (
-            <div
-              class={`w-6 h-6 cursor-pointer transition-colors duration-100 ${
-                world().has(cell.key)
-                  ? "bg-green-400 hover:bg-green-300"
-                  : "bg-gray-700 hover:bg-gray-600"
-              }`}
-              onClick={() => toggleCell(cell.x, cell.y)}
-              title={`(${cell.x}, ${cell.y})`}
-            />
-          )}
-        </For>
-      </div>
-
-      <div class="mt-4 text-xs text-gray-400">
-        Green = alive | Gray = dead | Click to toggle
+      <div class="px-4">
+        <div
+          class={`inline-grid border border-gray-600 bg-gray-800 gap-px ${
+            isDragging() ? "cursor-grabbing" : ""
+          }`}
+          style={{
+            "grid-template-columns": `repeat(${viewport().width}, 16px)`,
+          }}
+          onMouseDown={handleMouseDown}
+        >
+          <For each={cells()}>
+            {(cell) => (
+              <div
+                class={`w-4 h-4 cursor-pointer transition-colors duration-100 ${
+                  world().has(cell.key)
+                    ? "bg-green-400 hover:bg-green-300"
+                    : "bg-gray-700 hover:bg-gray-600"
+                }`}
+                onClick={(e) => toggleCell(cell.x, cell.y, e)}
+                onMouseDown={handleMouseDown}
+                title={`(${cell.x}, ${cell.y})`}
+              />
+            )}
+          </For>
+        </div>
       </div>
     </div>
   );
