@@ -5,6 +5,15 @@ import { createSignal, For, onMount, onCleanup, createEffect } from "solid-js";
 type Cell = [number, number];
 type World = Set<string>;
 
+// Pattern types
+interface Pattern {
+  name: string;
+  cells: Cell[];
+  description: string;
+}
+
+type PlacementMode = "single" | "pattern";
+
 interface Viewport {
   x: number;
   y: number;
@@ -82,6 +91,164 @@ function getViewportCells(viewport: Viewport) {
   return cells;
 }
 
+// Pattern definitions
+const patterns: Pattern[] = [
+  {
+    name: "Single Cell",
+    cells: [[0, 0]],
+    description: "Toggle individual cells",
+  },
+  {
+    name: "Glider",
+    cells: [
+      [1, 0],
+      [2, 1],
+      [0, 2],
+      [1, 2],
+      [2, 2],
+    ],
+    description: "Moves diagonally across the grid",
+  },
+  {
+    name: "Blinker",
+    cells: [
+      [0, 0],
+      [1, 0],
+      [2, 0],
+    ],
+    description: "Oscillates between horizontal and vertical",
+  },
+  {
+    name: "Block",
+    cells: [
+      [0, 0],
+      [1, 0],
+      [0, 1],
+      [1, 1],
+    ],
+    description: "Still life - never changes",
+  },
+  {
+    name: "Beacon",
+    cells: [
+      [0, 0],
+      [1, 0],
+      [0, 1],
+      [3, 2],
+      [2, 3],
+      [3, 3],
+    ],
+    description: "Oscillates with period 2",
+  },
+  {
+    name: "Toad",
+    cells: [
+      [1, 0],
+      [2, 0],
+      [3, 0],
+      [0, 1],
+      [1, 1],
+      [2, 1],
+    ],
+    description: "Oscillates with period 2",
+  },
+  {
+    name: "LWSS",
+    cells: [
+      [1, 0],
+      [4, 0],
+      [0, 1],
+      [0, 2],
+      [4, 2],
+      [0, 3],
+      [1, 3],
+      [2, 3],
+      [3, 3],
+    ],
+    description: "Lightweight spaceship - travels horizontally",
+  },
+  {
+    name: "Pulsar",
+    cells: [
+      [2, 0],
+      [3, 0],
+      [4, 0],
+      [8, 0],
+      [9, 0],
+      [10, 0],
+      [0, 2],
+      [5, 2],
+      [7, 2],
+      [12, 2],
+      [0, 3],
+      [5, 3],
+      [7, 3],
+      [12, 3],
+      [0, 4],
+      [5, 4],
+      [7, 4],
+      [12, 4],
+      [2, 5],
+      [3, 5],
+      [4, 5],
+      [8, 5],
+      [9, 5],
+      [10, 5],
+      [2, 7],
+      [3, 7],
+      [4, 7],
+      [8, 7],
+      [9, 7],
+      [10, 7],
+      [0, 8],
+      [5, 8],
+      [7, 8],
+      [12, 8],
+      [0, 9],
+      [5, 9],
+      [7, 9],
+      [12, 9],
+      [0, 10],
+      [5, 10],
+      [7, 10],
+      [12, 10],
+      [2, 12],
+      [3, 12],
+      [4, 12],
+      [8, 12],
+      [9, 12],
+      [10, 12],
+    ],
+    description: "Large oscillator with period 3",
+  },
+];
+
+function placePattern(
+  world: World,
+  pattern: Pattern,
+  centerX: number,
+  centerY: number,
+): World {
+  const newWorld = new Set(world);
+
+  // Calculate pattern bounds to center it properly
+  const minX = Math.min(...pattern.cells.map(([x]) => x));
+  const maxX = Math.max(...pattern.cells.map(([x]) => x));
+  const minY = Math.min(...pattern.cells.map(([, y]) => y));
+  const maxY = Math.max(...pattern.cells.map(([, y]) => y));
+
+  const offsetX = centerX - Math.floor((minX + maxX) / 2);
+  const offsetY = centerY - Math.floor((minY + maxY) / 2);
+
+  for (const [x, y] of pattern.cells) {
+    const worldX = x + offsetX;
+    const worldY = y + offsetY;
+    newWorld.add(cellKey(worldX, worldY));
+  }
+
+  return newWorld;
+}
+
 // Test patterns
 const glider = createWorld([
   [1, 0],
@@ -117,6 +284,11 @@ export const Game: Component = () => {
     viewportX: 0,
     viewportY: 0,
   });
+  const [selectedPattern, setSelectedPattern] = createSignal<Pattern>(
+    patterns[0],
+  );
+  const [placementMode, setPlacementMode] =
+    createSignal<PlacementMode>("single");
 
   let gameInterval: number;
 
@@ -212,14 +384,21 @@ export const Game: Component = () => {
   const toggleCell = (worldX: number, worldY: number, e?: MouseEvent) => {
     if (isDragging()) return; // Don't toggle if we're dragging
 
-    const key = cellKey(worldX, worldY);
-    const newWorld = new Set(world());
-    if (newWorld.has(key)) {
-      newWorld.delete(key);
+    if (placementMode() === "single") {
+      const key = cellKey(worldX, worldY);
+      const newWorld = new Set(world());
+      if (newWorld.has(key)) {
+        newWorld.delete(key);
+      } else {
+        newWorld.add(key);
+      }
+      setWorld(newWorld);
     } else {
-      newWorld.add(key);
+      // Pattern placement mode
+      const pattern = selectedPattern();
+      const newWorld = placePattern(world(), pattern, worldX, worldY);
+      setWorld(newWorld);
     }
-    setWorld(newWorld);
   };
 
   const handleMouseDown = (e: MouseEvent) => {
@@ -263,9 +442,52 @@ export const Game: Component = () => {
           {viewport().x}, {viewport().y}) {viewport().width}x{viewport().height}{" "}
           | Zoom: {viewport().zoom}x |{running() ? "RUNNING" : "PAUSED"}
         </div>
-        <div class="text-xs text-gray-400 mt-1">
-          Click cells to toggle | Shift + drag to pan | WASD = pan | SPACE =
-          step | R = run/pause
+
+        <div class="flex gap-4 items-center mt-2 mb-2">
+          <div class="flex items-center gap-2">
+            <label class="text-sm text-gray-300">Mode:</label>
+            <select
+              class="bg-gray-700 text-white px-2 py-1 rounded text-sm"
+              value={placementMode()}
+              onChange={(e) =>
+                setPlacementMode(e.currentTarget.value as PlacementMode)
+              }
+            >
+              <option value="single">Single Cell</option>
+              <option value="pattern">Pattern</option>
+            </select>
+          </div>
+
+          {placementMode() === "pattern" && (
+            <div class="flex items-center gap-2">
+              <label class="text-sm text-gray-300">Pattern:</label>
+              <select
+                class="bg-gray-700 text-white px-2 py-1 rounded text-sm"
+                value={selectedPattern().name}
+                onChange={(e) => {
+                  const pattern = patterns.find(
+                    (p) => p.name === e.currentTarget.value,
+                  );
+                  if (pattern) setSelectedPattern(pattern);
+                }}
+              >
+                <For each={patterns.slice(1)}>
+                  {(pattern) => (
+                    <option value={pattern.name}>{pattern.name}</option>
+                  )}
+                </For>
+              </select>
+              <span class="text-xs text-gray-400">
+                {selectedPattern().description}
+              </span>
+            </div>
+          )}
+        </div>
+
+        <div class="text-xs text-gray-400">
+          {placementMode() === "single"
+            ? "Click cells to toggle | Drag to pan | WASD = pan | SPACE = step | R = run/pause"
+            : `Click to place ${selectedPattern().name} | Drag to pan | WASD = pan | SPACE = step | R = run/pause`}
         </div>
       </div>
 
