@@ -1,5 +1,12 @@
 import type { Component } from "solid-js";
-import { createSignal, For, onMount, onCleanup, createEffect } from "solid-js";
+import {
+  createSignal,
+  For,
+  onMount,
+  onCleanup,
+  createEffect,
+  createMemo,
+} from "solid-js";
 
 // Types from our terminal version
 type Cell = [number, number];
@@ -281,14 +288,24 @@ export const Game: Component = () => {
 
   const [world, setWorld] = createSignal<World>(new Set<number>());
 
-  // Dynamic screen positions that update with viewport
-  const screenPositions = () => {
-    objectCreationCount += viewport().width * viewport().height;
-    console.log(
-      `📱 screenPositions() called - creating ${viewport().width * viewport().height} screen position objects`,
-    );
-    return createScreenPositions(viewport().width, viewport().height);
+  const createStableGridPositions = (width: number, height: number) => {
+    const positions = [];
+    for (let screenY = 0; screenY < height; screenY++) {
+      for (let screenX = 0; screenX < width; screenX++) {
+        positions.push({
+          screenX,
+          screenY,
+          id: screenY * width + screenX, // Stable ID that won't change
+        });
+      }
+    }
+    return positions;
   };
+
+  const gridPositions = createMemo(() =>
+    createStableGridPositions(viewport().width, viewport().height),
+  );
+
   const [generation, setGeneration] = createSignal(0);
   const [running, setRunning] = createSignal(false);
   const [isDragging, setIsDragging] = createSignal(false);
@@ -618,20 +635,27 @@ export const Game: Component = () => {
         }}
         onMouseDown={handleMouseDown}
       >
-        {Array.from({ length: viewport().height }, (_, y) =>
-          Array.from({ length: viewport().width }, (_, x) => (
-            <div
-              class={`w-5 h-5 cursor-pointer transition-colors duration-100 border-[0.5px] ${
-                world().has(cellKey(viewport().x + x, viewport().y + y))
-                  ? "bg-black border-gray-400 hover:bg-gray-800"
-                  : "bg-white border-gray-200 hover:bg-gray-100"
-              }`}
-              onClick={(e) => toggleCell(viewport().x + x, viewport().y + y, e)}
-              onMouseDown={handleMouseDown}
-              title={`(${viewport().x + x}, ${viewport().y + y})`}
-            />
-          )),
-        )}
+        <For each={gridPositions()}>
+          {(pos) => {
+            // Calculate world coordinates on-the-fly (doesn't create objects)
+            const worldX = viewport().x + pos.screenX;
+            const worldY = viewport().y + pos.screenY;
+            const cellIsAlive = world().has(cellKey(worldX, worldY));
+
+            return (
+              <div
+                class={`w-5 h-5 cursor-pointer transition-colors duration-100 border-[0.5px] ${
+                  cellIsAlive
+                    ? "bg-black border-gray-400 hover:bg-gray-800"
+                    : "bg-white border-gray-200 hover:bg-gray-100"
+                }`}
+                onClick={(e) => toggleCell(worldX, worldY, e)}
+                onMouseDown={handleMouseDown}
+                title={`(${worldX}, ${worldY})`}
+              />
+            );
+          }}
+        </For>
       </div>
     </div>
   );
