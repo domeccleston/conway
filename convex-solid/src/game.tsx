@@ -249,25 +249,32 @@ function placePattern(
   return newWorld;
 }
 
-// Test patterns
-const glider = createWorld([
-  [1, 0],
-  [2, 1],
-  [0, 2],
-  [1, 2],
-  [2, 2],
-]);
+// Test patterns - positioned to center on screen
+const createCenteredPatterns = (
+  viewportWidth: number,
+  viewportHeight: number,
+) => {
+  const centerX = Math.floor(viewportWidth / 2);
+  const centerY = Math.floor(viewportHeight / 2);
 
-const blinker = createWorld([
-  [5, 5],
-  [6, 5],
-  [7, 5],
-]);
+  const glider = createWorld([
+    [centerX + 1, centerY + 0],
+    [centerX + 2, centerY + 1],
+    [centerX + 0, centerY + 2],
+    [centerX + 1, centerY + 2],
+    [centerX + 2, centerY + 2],
+  ]);
+
+  const blinker = createWorld([
+    [centerX + 5, centerY + 5],
+    [centerX + 6, centerY + 5],
+    [centerX + 7, centerY + 5],
+  ]);
+
+  return new Set([...glider, ...blinker]);
+};
 
 export const Game: Component = () => {
-  const [world, setWorld] = createSignal<World>(
-    new Set([...glider, ...blinker]),
-  );
   const [viewport, setViewport] = createSignal<Viewport>({
     x: 0,
     y: 0,
@@ -275,6 +282,8 @@ export const Game: Component = () => {
     height: 40,
     zoom: 1.0,
   });
+
+  const [world, setWorld] = createSignal<World>(createCenteredPatterns(80, 40));
   const [generation, setGeneration] = createSignal(0);
   const [running, setRunning] = createSignal(false);
   const [isDragging, setIsDragging] = createSignal(false);
@@ -294,10 +303,9 @@ export const Game: Component = () => {
 
   // Calculate viewport size based on window size
   const updateViewportSize = () => {
-    const cellSize = 16; // px
-    const headerHeight = 120; // approximate height of header
-    const width = Math.floor((window.innerWidth - 40) / cellSize); // 40px for padding
-    const height = Math.floor((window.innerHeight - headerHeight) / cellSize);
+    const cellSize = 20; // px - larger cells
+    const width = Math.floor(window.innerWidth / cellSize);
+    const height = Math.floor(window.innerHeight / cellSize);
 
     setViewport((prev) => ({
       ...prev,
@@ -308,6 +316,10 @@ export const Game: Component = () => {
 
   createEffect(() => {
     updateViewportSize();
+    // Re-center patterns when viewport changes
+    if (world().size === 0) {
+      setWorld(createCenteredPatterns(viewport().width, viewport().height));
+    }
   });
 
   const cells = () => getViewportCells(viewport());
@@ -419,8 +431,8 @@ export const Game: Component = () => {
     const dy = e.clientY - dragStart().y;
 
     // Convert pixel movement to cell movement
-    const cellDx = -Math.floor(dx / 16); // 16px per cell, negative for natural drag direction
-    const cellDy = -Math.floor(dy / 16);
+    const cellDx = -Math.floor(dx / 20); // 20px per cell, negative for natural drag direction
+    const cellDy = -Math.floor(dy / 20);
 
     setViewport((prev) => ({
       ...prev,
@@ -434,20 +446,20 @@ export const Game: Component = () => {
   };
 
   return (
-    <div class="bg-gray-900 text-white h-screen overflow-hidden">
-      <div class="p-4">
-        <h1 class="text-2xl font-bold mb-2">Game of Life</h1>
-        <div class="text-sm text-gray-300">
-          Population: {world().size} | Generation: {generation()} | Viewport: (
-          {viewport().x}, {viewport().y}) {viewport().width}x{viewport().height}{" "}
-          | Zoom: {viewport().zoom}x |{running() ? "RUNNING" : "PAUSED"}
+    <div class="bg-white h-screen overflow-hidden relative antialiased">
+      {/* Floating Control Panel */}
+      <div class="absolute top-4 left-4 z-10 bg-white/90 backdrop-blur-sm border border-gray-300 rounded-lg p-4 shadow-lg w-[500px]">
+        <h1 class="text-xl font-bold mb-2 text-gray-900">Game of Life</h1>
+        <div class="text-xs text-gray-600 mb-2">
+          Pop: {world().size} | Gen: {generation()} | ({viewport().x},{" "}
+          {viewport().y}) | {running() ? "RUNNING" : "PAUSED"}
         </div>
 
-        <div class="flex gap-4 items-center mt-2 mb-2">
+        <div class="flex items-center gap-4 mb-2">
           <div class="flex items-center gap-2">
-            <label class="text-sm text-gray-300">Mode:</label>
+            <label class="text-xs text-gray-700">Mode:</label>
             <select
-              class="bg-gray-700 text-white px-2 py-1 rounded text-sm"
+              class="bg-white border border-gray-300 text-gray-900 px-2 py-1 rounded text-xs"
               value={placementMode()}
               onChange={(e) =>
                 setPlacementMode(e.currentTarget.value as PlacementMode)
@@ -458,64 +470,63 @@ export const Game: Component = () => {
             </select>
           </div>
 
-          {placementMode() === "pattern" && (
-            <div class="flex items-center gap-2">
-              <label class="text-sm text-gray-300">Pattern:</label>
-              <select
-                class="bg-gray-700 text-white px-2 py-1 rounded text-sm"
-                value={selectedPattern().name}
-                onChange={(e) => {
-                  const pattern = patterns.find(
-                    (p) => p.name === e.currentTarget.value,
-                  );
-                  if (pattern) setSelectedPattern(pattern);
-                }}
-              >
-                <For each={patterns.slice(1)}>
-                  {(pattern) => (
-                    <option value={pattern.name}>{pattern.name}</option>
-                  )}
-                </For>
-              </select>
-              <span class="text-xs text-gray-400">
-                {selectedPattern().description}
-              </span>
-            </div>
-          )}
+          <div
+            class="flex items-center gap-2"
+            style={{
+              visibility: placementMode() === "pattern" ? "visible" : "hidden",
+            }}
+          >
+            <label class="text-xs text-gray-700">Pattern:</label>
+            <select
+              class="bg-white border border-gray-300 text-gray-900 px-2 py-1 rounded text-xs w-24"
+              value={selectedPattern().name}
+              onChange={(e) => {
+                const pattern = patterns.find(
+                  (p) => p.name === e.currentTarget.value,
+                );
+                if (pattern) setSelectedPattern(pattern);
+              }}
+            >
+              <For each={patterns.slice(1)}>
+                {(pattern) => (
+                  <option value={pattern.name}>{pattern.name}</option>
+                )}
+              </For>
+            </select>
+          </div>
         </div>
 
-        <div class="text-xs text-gray-400">
+        <div class="text-xs text-gray-500">
           {placementMode() === "single"
-            ? "Click cells to toggle | Drag to pan | WASD = pan | SPACE = step | R = run/pause"
-            : `Click to place ${selectedPattern().name} | Drag to pan | WASD = pan | SPACE = step | R = run/pause`}
+            ? "Click: toggle | Drag: pan | WASD: pan | Space: step | R: run/pause"
+            : `Click: place ${selectedPattern().name} | Drag: pan | WASD: pan | Space: step | R: run/pause`}
         </div>
       </div>
 
-      <div class="px-4">
-        <div
-          class={`inline-grid border border-gray-600 bg-gray-800 gap-px ${
-            isDragging() ? "cursor-grabbing" : ""
-          }`}
-          style={{
-            "grid-template-columns": `repeat(${viewport().width}, 16px)`,
-          }}
-          onMouseDown={handleMouseDown}
-        >
-          <For each={cells()}>
-            {(cell) => (
-              <div
-                class={`w-4 h-4 cursor-pointer transition-colors duration-100 ${
-                  world().has(cell.key)
-                    ? "bg-green-400 hover:bg-green-300"
-                    : "bg-gray-700 hover:bg-gray-600"
-                }`}
-                onClick={(e) => toggleCell(cell.x, cell.y, e)}
-                onMouseDown={handleMouseDown}
-                title={`(${cell.x}, ${cell.y})`}
-              />
-            )}
-          </For>
-        </div>
+      {/* Full Screen Game Grid */}
+      <div
+        class={`w-full h-full inline-grid bg-white ${
+          isDragging() ? "cursor-grabbing" : ""
+        }`}
+        style={{
+          "grid-template-columns": `repeat(${viewport().width}, 20px)`,
+        }}
+        onMouseDown={handleMouseDown}
+      >
+        <For each={cells()}>
+          {(cell) => (
+            <div
+              class={`w-5 h-5 cursor-pointer transition-colors duration-100 border-[0.5px] ${
+                world().has(cell.key)
+                  ? "bg-black border-gray-400 hover:bg-gray-800"
+                  : "bg-white border-gray-200 hover:bg-gray-100"
+              }`}
+              onClick={(e) => toggleCell(cell.x, cell.y, e)}
+              onMouseDown={handleMouseDown}
+              title={`(${cell.x}, ${cell.y})`}
+            />
+          )}
+        </For>
       </div>
     </div>
   );
