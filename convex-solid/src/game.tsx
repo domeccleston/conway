@@ -298,6 +298,15 @@ export const Game: Component = () => {
   );
   const [placementMode, setPlacementMode] =
     createSignal<PlacementMode>("single");
+  const [speed, setSpeed] = createSignal(500); // milliseconds between generations
+
+  const speedPresets = [
+    { name: "Ultra Fast", value: 50 },
+    { name: "Fast", value: 200 },
+    { name: "Normal", value: 500 },
+    { name: "Slow", value: 1000 },
+    { name: "Very Slow", value: 2000 },
+  ];
 
   let gameInterval: number;
 
@@ -342,7 +351,7 @@ export const Game: Component = () => {
     setRunning(isRunning);
 
     if (isRunning) {
-      gameInterval = setInterval(tick, 500);
+      gameInterval = setInterval(tick, speed());
     } else {
       clearInterval(gameInterval);
     }
@@ -490,6 +499,21 @@ export const Game: Component = () => {
               <For each={patterns.slice(1)}>
                 {(pattern) => (
                   <option value={pattern.name}>{pattern.name}</option>
+                )}
+              </For>
+            </select>
+          </div>
+
+          <div class="flex items-center gap-2">
+            <label class="text-xs text-gray-700">Speed:</label>
+            <select
+              class="bg-white border border-gray-300 text-gray-900 px-2 py-1 rounded text-xs w-20"
+              value={speed()}
+              onChange={(e) => setSpeed(parseInt(e.currentTarget.value))}
+            >
+              <For each={speedPresets}>
+                {(preset) => (
+                  <option value={preset.value}>{preset.name}</option>
                 )}
               </For>
             </select>
