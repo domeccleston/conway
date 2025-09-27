@@ -13,8 +13,11 @@ import type {
   FilterApi,
   FunctionReference,
 } from "convex/server";
-import type * as game from "../game.js";
+import type * as crons from "../crons.js";
+import type * as game from "../game.../gameOfLife.js
+import type * as gameOfLife from "../gameOfLife.js";
 import type * as tasks from "../tasks.js";
+import type * as tick from "../tick.js";
 
 /**
  * A utility for referencing Convex functions in your app's API.
@@ -25,8 +28,11 @@ import type * as tasks from "../tasks.js";
  * ```
  */
 declare const fullApi: ApiFromModules<{
+  crons: typeof crons;
   game: typeof game;
+  gameOfLife: typeof gameOfLife;
   tasks: typeof tasks;
+  tick: typeof tick;
 }>;
 export declare const api: FilterApi<
   typeof fullApi,

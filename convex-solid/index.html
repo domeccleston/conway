@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Game of Life - Vanilla JS</title>
+    <title>Game of Life - Server Tick</title>
     <style>
       body {
         margin: 0;
@@ -103,9 +103,8 @@
   </head>
   <body>
     <div id="hud">
-      <div class="hud-title">Game of Life - Vanilla JS</div>
+      <div class="hud-title">Game of Life - Server Tick</div>
       <div class="hud-row">Generation: <span id="generation">0</span></div>
-      <div class="hud-row">Total Cells: <span id="totalCells">0</span></div>
       <div class="hud-row">Total Chunks: <span id="totalChunks">0</span></div>
       <div class="hud-row">Visible Cells: <span id="visibleCells">0</span></div>
       <div class="hud-row">Memory: <span id="memory">N/A</span></div>
@@ -114,36 +113,8 @@
       <div class="hud-row">
         Viewport: (<span id="viewportX">0</span>, <span id="viewportY">0</span>)
       </div>
-      <div class="hud-row">Status: <span id="status">PAUSED</span></div>
+      <div class="hud-row">Status: <span id="status">STOPPED</span></div>
 
-      <!-- Speed Control -->
-      <div class="hud-row" style="margin-top: 8px">
-        <label
-          for="speedSelect"
-          style="margin-right: 8px; font-size: 12px; color: #374151"
-          >Speed:</label
-        >
-        <select
-          id="speedSelect"
-          style="
-            background: white;
-            border: 1px solid #d1d5db;
-            color: #374151;
-            padding: 2px 6px;
-            border-radius: 4px;
-            font-size: 12px;
-          "
-        >
-          <option value="50">Ultra Fast (20fps)</option>
-          <option value="100">Very Fast (10fps)</option>
-          <option value="200">Fast (5fps)</option>
-          <option value="500" selected>Normal (2fps)</option>
-          <option value="1000">Slow (1fps)</option>
-          <option value="2000">Very Slow (0.5fps)</option>
-        </select>
-      </div>
-
-      <!-- Shapes Section -->
       <div class="shapes-section">
         <div class="shapes-title">Place Shapes:</div>
         <div class="shapes-grid">
@@ -155,12 +126,6 @@
           <button class="shape-button" data-shape="beacon">Beacon</button>
           <button class="shape-button" data-shape="toad">Toad</button>
           <button class="shape-button" data-shape="pulsar">Pulsar</button>
-          <button class="shape-button" data-shape="pentadecathlon">
-            Pentadeca.
-          </button>
-          <button class="shape-button" data-shape="gospergun">
-            Gosper Gun
-          </button>
         </div>
       </div>
 
@@ -170,7 +135,7 @@
         <div>Shift + drag: pan viewport</div>
         <div>Mouse wheel: zoom</div>
         <div>WASD/arrows: pan</div>
-        <div>Space: step, R: run/pause</div>
+        <div>Space: toggle simulation, C: clear</div>
       </div>
     </div>
 
@@ -179,139 +144,24 @@
     <!-- Convex Integration -->
     <script src="https://unpkg.com/convex@1.3.1/dist/browser.bundle.js"></script>
     <script>
-      // Wait for Convex to load, then initialize
-      function initializeConvex() {
-        if (typeof convex === "undefined") {
-          // Convex not loaded yet, wait a bit more
-          setTimeout(initializeConvex, 100);
-          return;
-        }
-
-        console.log("Convex library loaded successfully");
-
-        try {
-          // Convex setup
-          const CONVEX_URL = "https://trustworthy-gnu-78.convex.cloud";
-          const client = new convex.ConvexClient(CONVEX_URL);
-
-          console.log("Convex client created, attempting to connect...");
-
-          // Test Convex connection by loading tasks
-          client.onUpdate("tasks:get", {}, (tasks) => {
-            console.log("Convex tasks loaded:", tasks);
-
-            // Display task data in HUD for testing
-            const hudElement = document.getElementById("hud");
-            let convexInfo = document.getElementById("convex-info");
-
-            if (!convexInfo) {
-              convexInfo = document.createElement("div");
-              convexInfo.id = "convex-info";
-              convexInfo.style.cssText = `
-                            margin-top: 8px;
-                            padding-top: 8px;
-                            border-top: 1px solid #e5e7eb;
-                            font-size: 11px;
-                            color: #6b7280;
-                        `;
-              hudElement.appendChild(convexInfo);
-            }
-
-            if (tasks && tasks.length > 0) {
-              convexInfo.innerHTML = `
-                            <div style="font-weight: bold; color: #059669;">✓ Convex Connected</div>
-                            <div>Tasks loaded: ${tasks.length}</div>
-                            <div style="max-height: 60px; overflow-y: auto; margin-top: 4px;">
-                                ${tasks
-                                  .map(
-                                    (task) =>
-                                      `<div style="margin: 2px 0;">• ${task.text || "No text"}</div>`,
-                                  )
-                                  .join("")}
-                            </div>
-                        `;
-            } else {
-              convexInfo.innerHTML = `
-                            <div style="font-weight: bold; color: #dc2626;">⚠ Convex Connected</div>
-                            <div>No tasks found</div>
-                        `;
-            }
-          });
-
-          // Handle connection errors
-          client.onError = (error) => {
-            console.error("Convex connection error:", error);
-
-            let convexInfo = document.getElementById("convex-info");
-            if (!convexInfo) {
-              convexInfo = document.createElement("div");
-              convexInfo.id = "convex-info";
-              convexInfo.style.cssText = `
-                            margin-top: 8px;
-                            padding-top: 8px;
-                            border-top: 1px solid #e5e7eb;
-                            font-size: 11px;
-                            color: #6b7280;
-                        `;
-              document.getElementById("hud").appendChild(convexInfo);
-            }
-
-            convexInfo.innerHTML = `
-                        <div style="font-weight: bold; color: #dc2626;">✗ Convex Error</div>
-                        <div>Check console for details</div>
-                    `;
-          };
-        } catch (error) {
-          console.error("Error initializing Convex:", error);
-
-          let convexInfo = document.getElementById("convex-info");
-          if (!convexInfo) {
-            convexInfo = document.createElement("div");
-            convexInfo.id = "convex-info";
-            convexInfo.style.cssText = `
-                        margin-top: 8px;
-                        padding-top: 8px;
-                        border-top: 1px solid #e5e7eb;
-                        font-size: 11px;
-                        color: #6b7280;
-                    `;
-            document.getElementById("hud").appendChild(convexInfo);
-          }
-
-          convexInfo.innerHTML = `
-                    <div style="font-weight: bold; color: #dc2626;">✗ Convex Init Error</div>
-                    <div>Failed to initialize client</div>
-                `;
-        }
-      }
-
-      // Start trying to initialize Convex
-      initializeConvex();
-    </script>
-
-    <script>
-      class GameOfLife {
+      class ServerTickGameOfLife {
         constructor() {
           this.canvas = document.getElementById("gameCanvas");
           this.ctx = this.canvas.getContext("2d");
-          this.world = new Set(); // Using Set with "x,y" string keys
-          this.generation = 0;
-          this.isRunning = false;
-          this.gameInterval = null;
 
           // Grid configuration
           this.CELL_SIZE = 20;
-          this.speed = 500; // milliseconds between generations
-          this.CHUNK_SIZE = 64; // 64x64 cells per chunk
+          this.CHUNK_SIZE = 64;
 
-          // Chunked world storage - spatial hash map
-          this.chunks = new Map(); // "chunkX,chunkY" -> Set of packed coordinates
+          // Local state (mirrors server state)
+          this.chunks = new Map(); // Local cache of visible chunks
+          this.generation = 0;
+          this.isRunning = false;
 
           // Convex integration
-          this.worldId = null;
           this.convexClient = null;
-          this.isConnectedToConvex = false;
-          this.pendingChunkUpdates = new Map(); // Batch updates for performance
+          this.isConnected = false;
+          this.pendingChunkUpdates = new Map();
           this.syncInterval = null;
 
           // Viewport and zoom
@@ -327,11 +177,11 @@
           this.isShiftPressed = false;
           this.lastToggledCell = "";
           this.dragStart = { x: 0, y: 0, viewportX: 0, viewportY: 0 };
-          this.selectedShape = "draw"; // Current shape to place
+          this.selectedShape = "draw";
 
           // Performance throttling
           this.lastDragUpdate = 0;
-          this.DRAG_THROTTLE_MS = 16; // ~60fps
+          this.DRAG_THROTTLE_MS = 16;
 
           // Performance monitoring
           this.frameCount = 0;
@@ -342,61 +192,59 @@
           this.setupCanvas();
           this.setupEventListeners();
           this.initializeConvex();
-          this.initializeWorld();
           this.startPerformanceMonitoring();
           this.render();
         }
 
+        setupCanvas() {
+          this.canvas.width = window.innerWidth;
+          this.canvas.height = window.innerHeight;
+          this.GRID_WIDTH = Math.floor(this.canvas.width / this.CELL_SIZE);
+          this.GRID_HEIGHT = Math.floor(this.canvas.height / this.CELL_SIZE);
+        }
+
         async initializeConvex() {
           try {
-            // Wait for convex to be available
             while (typeof convex === "undefined") {
               await new Promise((resolve) => setTimeout(resolve, 100));
             }
 
             const CONVEX_URL = "https://trustworthy-gnu-78.convex.cloud";
             this.convexClient = new convex.ConvexClient(CONVEX_URL);
+            this.isConnected = true;
 
-            // Create or get world
-            this.worldId = "jd7e90k51ksqdtg8pr5q3mg2sn7rdexp";
+            console.log("Connected to Convex");
 
-            console.log("Created world:", this.worldId);
-            this.isConnectedToConvex = true;
+            // Initialize game state if it doesn't exist
+            await this.convexClient.mutation("gameOfLife:initializeGameState");
 
-            // Subscribe to world state
+            // Subscribe to game state
             this.convexClient.onUpdate(
-              "game:getWorld",
-              { worldId: this.worldId },
-              (world) => {
-                if (world) {
-                  this.generation = world.generation;
-                  this.isRunning = world.isRunning;
-                  this.speed = world.speed;
+              "gameOfLife:getGameState",
+              {},
+              (gameState) => {
+                if (gameState) {
+                  this.generation = gameState.generation;
+                  this.isRunning = gameState.isRunning;
                   this.updateHUD();
-
-                  // Update speed dropdown
-                  document.getElementById("speedSelect").value = world.speed;
                 }
               },
             );
 
-            // Subscribe to visible chunks (initially load center area)
+            // Subscribe to visible chunks
             this.loadVisibleChunks();
 
             // Start periodic sync for chunk updates
             this.syncInterval = setInterval(() => {
               this.syncPendingChunks();
-            }, 200); // Sync every 200ms
-
-            this.updateConvexStatus("✓ Connected to Convex");
+            }, 200);
           } catch (error) {
             console.error("Failed to initialize Convex:", error);
-            this.updateConvexStatus("✗ Convex Error");
           }
         }
 
         loadVisibleChunks() {
-          if (!this.isConnectedToConvex) return;
+          if (!this.isConnected) return;
 
           const effectiveCellSize = this.CELL_SIZE * this.zoom;
           const centerX = this.canvas.width / 2;
@@ -412,18 +260,15 @@
           const minChunkY = Math.floor(topBound / this.CHUNK_SIZE) - 1;
           const maxChunkY = Math.floor(bottomBound / this.CHUNK_SIZE) + 1;
 
-          // Subscribe to visible chunks
           this.convexClient.onUpdate(
-            "game:getVisibleChunks",
+            "gameOfLife:getChunks",
             {
-              worldId: this.worldId,
               minChunkX,
               maxChunkX,
               minChunkY,
               maxChunkY,
             },
             (convexChunks) => {
-              // Update local chunks from Convex
               this.syncFromConvex(
                 convexChunks,
                 minChunkX,
@@ -443,7 +288,7 @@
           minChunkY,
           maxChunkY,
         ) {
-          // Clear chunks in the visible area (but keep others)
+          // Clear local chunks in visible area
           for (let chunkX = minChunkX; chunkX <= maxChunkX; chunkX++) {
             for (let chunkY = minChunkY; chunkY <= maxChunkY; chunkY++) {
               const chunkKey = `${chunkX},${chunkY}`;
@@ -459,188 +304,8 @@
           }
         }
 
-        updateConvexStatus(message) {
-          let convexInfo = document.getElementById("convex-info");
-          if (convexInfo) {
-            convexInfo.innerHTML = `<div style="font-weight: bold; color: #059669;">${message}</div>`;
-          }
-        }
-
-        // Queue chunk updates for batching
-        queueChunkUpdate(chunkX, chunkY) {
-          if (!this.isConnectedToConvex) return;
-
-          const chunkKey = `${chunkX},${chunkY}`;
-          const chunk = this.chunks.get(chunkKey);
-          const cells = chunk ? Array.from(chunk) : [];
-
-          this.pendingChunkUpdates.set(chunkKey, {
-            chunkX,
-            chunkY,
-            cells,
-          });
-        }
-
-        // Sync pending chunk updates to Convex
-        async syncPendingChunks() {
-          if (!this.isConnectedToConvex || this.pendingChunkUpdates.size === 0)
-            return;
-
-          try {
-            // Convert pending updates to array
-            const chunksToUpdate = Array.from(
-              this.pendingChunkUpdates.values(),
-            );
-            this.pendingChunkUpdates.clear();
-
-            // Use batch update for better performance
-            await this.convexClient.mutation("game:updateChunks", {
-              worldId: this.worldId,
-              chunks: chunksToUpdate,
-              newGeneration: this.generation,
-            });
-          } catch (error) {
-            console.error("Failed to sync chunks:", error);
-          }
-        }
-
-        setupCanvas() {
-          this.canvas.width = window.innerWidth;
-          this.canvas.height = window.innerHeight;
-          this.GRID_WIDTH = Math.floor(this.canvas.width / this.CELL_SIZE);
-          this.GRID_HEIGHT = Math.floor(this.canvas.height / this.CELL_SIZE);
-        }
-
-        setupEventListeners() {
-          // Canvas mouse handlers
-          this.canvas.addEventListener("mousedown", (e) =>
-            this.handleMouseDown(e),
-          );
-          this.canvas.addEventListener("mousemove", (e) =>
-            this.handleMouseMove(e),
-          );
-          this.canvas.addEventListener("wheel", (e) => this.handleWheel(e), {
-            passive: false,
-          });
-
-          // Global mouse handlers
-          document.addEventListener("mouseup", (e) => this.handleMouseUp(e));
-          document.addEventListener("mousemove", (e) =>
-            this.handleGlobalMouseMove(e),
-          );
-
-          // Keyboard controls
-          document.addEventListener("keydown", (e) => this.handleKeyDown(e));
-          document.addEventListener("keyup", (e) => this.handleKeyUp(e));
-
-          // Speed control
-          document
-            .getElementById("speedSelect")
-            .addEventListener("change", (e) => {
-              this.speed = parseInt(e.target.value);
-              this.updateGameSpeed();
-            });
-
-          // Shape buttons
-          document.querySelectorAll(".shape-button").forEach((button) => {
-            button.addEventListener("click", (e) => {
-              // Remove selected class from all buttons
-              document
-                .querySelectorAll(".shape-button")
-                .forEach((b) => b.classList.remove("selected"));
-              // Add selected class to clicked button
-              e.target.classList.add("selected");
-              // Update selected shape
-              this.selectedShape = e.target.dataset.shape;
-            });
-          });
-
-          // Window resize
-          window.addEventListener("resize", () => {
-            this.setupCanvas();
-            this.render();
-          });
-
-          // Prevent context menu on right click
-          this.canvas.addEventListener("contextmenu", (e) =>
-            e.preventDefault(),
-          );
-        }
-
-        startPerformanceMonitoring() {
-          const trackPerformance = () => {
-            this.frameCount++;
-            const now = performance.now();
-
-            // Update FPS every second
-            if (now - this.lastFpsTime >= 1000) {
-              this.fps = this.frameCount;
-              this.frameCount = 0;
-              this.lastFpsTime = now;
-              this.updatePerformanceHUD();
-            }
-
-            this.rafId = requestAnimationFrame(trackPerformance);
-          };
-
-          trackPerformance();
-        }
-
-        updatePerformanceHUD() {
-          // Update FPS
-          document.getElementById("fps").textContent = this.fps;
-
-          // Update memory usage (if available)
-          if (performance.memory) {
-            const memoryMB = Math.round(
-              performance.memory.usedJSHeapSize / 1024 / 1024,
-            );
-            document.getElementById("memory").textContent = `${memoryMB}MB`;
-            document.getElementById("memory").style.color = "#3b82f6"; // Blue color
-          } else {
-            document.getElementById("memory").textContent = "N/A";
-            document.getElementById("memory").style.color = "#6b7280"; // Gray color
-          }
-        }
-
-        cleanup() {
-          // Clean up performance monitoring
-          if (this.rafId) {
-            cancelAnimationFrame(this.rafId);
-            this.rafId = null;
-          }
-
-          // Clean up game interval
-          if (this.gameInterval) {
-            clearInterval(this.gameInterval);
-            this.gameInterval = null;
-          }
-
-          // Clean up Convex sync
-          if (this.syncInterval) {
-            clearInterval(this.syncInterval);
-            this.syncInterval = null;
-          }
-
-          // Close Convex connection
-          if (this.convexClient) {
-            this.convexClient.close();
-          }
-        }
-
-        cellKey(x, y) {
-          return `${x},${y}`;
-        }
-
-        parseKey(key) {
-          const [x, y] = key.split(",").map(Number);
-          return [x, y];
-        }
-
-        // Coordinate packing/unpacking for efficient storage
+        // Coordinate packing/unpacking (same as before)
         packCoords(x, y) {
-          // Pack into 32-bit number: 16 bits each for x,y
-          // Range: -32,768 to +32,767 per axis
           return ((x & 0xffff) << 16) | (y & 0xffff);
         }
 
@@ -648,14 +313,12 @@
           let x = (packed >> 16) & 0xffff;
           let y = packed & 0xffff;
 
-          // Handle signed coordinates
           if (x >= 0x8000) x -= 0x10000;
           if (y >= 0x8000) y -= 0x10000;
 
           return [x, y];
         }
 
-        // Chunk management
         getChunkKey(worldX, worldY) {
           const chunkX = Math.floor(worldX / this.CHUNK_SIZE);
           const chunkY = Math.floor(worldY / this.CHUNK_SIZE);
@@ -673,7 +336,7 @@
           };
         }
 
-        // Add cell to chunked storage
+        // Add cell locally and queue for sync
         addCell(worldX, worldY) {
           const chunkKey = this.getChunkKey(worldX, worldY);
           const { chunkX, chunkY, localX, localY } = this.getChunkCoords(
@@ -687,11 +350,9 @@
           }
           this.chunks.get(chunkKey).add(packed);
 
-          // Queue for Convex sync
           this.queueChunkUpdate(chunkX, chunkY);
         }
 
-        // Remove cell from chunked storage
         removeCell(worldX, worldY) {
           const chunkKey = this.getChunkKey(worldX, worldY);
           const { chunkX, chunkY, localX, localY } = this.getChunkCoords(
@@ -703,17 +364,13 @@
           const chunk = this.chunks.get(chunkKey);
           if (chunk) {
             chunk.delete(packed);
-            // Clean up empty chunks
             if (chunk.size === 0) {
               this.chunks.delete(chunkKey);
             }
-
-            // Queue for Convex sync
             this.queueChunkUpdate(chunkX, chunkY);
           }
         }
 
-        // Check if cell exists
         hasCell(worldX, worldY) {
           const chunkKey = this.getChunkKey(worldX, worldY);
           const { localX, localY } = this.getChunkCoords(worldX, worldY);
@@ -723,31 +380,84 @@
           return chunk ? chunk.has(packed) : false;
         }
 
-        // Get all cells (for backward compatibility and stats)
-        getAllCells() {
-          const allCells = [];
-          for (const [chunkKey, chunk] of this.chunks) {
-            const [chunkX, chunkY] = chunkKey.split(",").map(Number);
+        queueChunkUpdate(chunkX, chunkY) {
+          if (!this.isConnected) return;
 
-            for (const packed of chunk) {
-              const [localX, localY] = this.unpackCoords(packed);
-              const worldX = chunkX * this.CHUNK_SIZE + localX;
-              const worldY = chunkY * this.CHUNK_SIZE + localY;
-              allCells.push([worldX, worldY]);
-            }
-          }
-          return allCells;
+          const chunkKey = `${chunkX},${chunkY}`;
+          const chunk = this.chunks.get(chunkKey);
+          const cells = chunk ? Array.from(chunk) : [];
+
+          this.pendingChunkUpdates.set(chunkKey, {
+            chunkX,
+            chunkY,
+            cells,
+          });
         }
 
-        // Get total cell count
-        getTotalCellCount() {
-          let total = 0;
-          for (const chunk of this.chunks.values()) {
-            total += chunk.size;
+        async syncPendingChunks() {
+          if (!this.isConnected || this.pendingChunkUpdates.size === 0) return;
+
+          try {
+            const chunksToUpdate = Array.from(
+              this.pendingChunkUpdates.values(),
+            );
+            this.pendingChunkUpdates.clear();
+
+            await this.convexClient.mutation("gameOfLife:placeCells", {
+              chunkUpdates: chunksToUpdate,
+            });
+          } catch (error) {
+            console.error("Failed to sync chunks:", error);
           }
-          return total;
         }
 
+        // Convert screen coordinates to world coordinates
+        screenToWorld(screenX, screenY) {
+          const effectiveCellSize = this.CELL_SIZE * this.zoom;
+          const centerX = this.canvas.width / 2;
+          const centerY = this.canvas.height / 2;
+
+          const worldX = Math.floor(
+            (screenX - centerX) / effectiveCellSize + this.viewportX,
+          );
+          const worldY = Math.floor(
+            (screenY - centerY) / effectiveCellSize + this.viewportY,
+          );
+
+          return [worldX, worldY];
+        }
+
+        worldToScreen(worldX, worldY) {
+          const effectiveCellSize = this.CELL_SIZE * this.zoom;
+          const centerX = this.canvas.width / 2;
+          const centerY = this.canvas.height / 2;
+
+          const screenX =
+            (worldX - this.viewportX) * effectiveCellSize + centerX;
+          const screenY =
+            (worldY - this.viewportY) * effectiveCellSize + centerY;
+
+          return [screenX, screenY];
+        }
+
+        toggleCell(x, y) {
+          const key = `${x},${y}`;
+
+          if (this.isMouseDown && this.lastToggledCell === key) {
+            return;
+          }
+
+          this.lastToggledCell = key;
+
+          if (this.hasCell(x, y)) {
+            this.removeCell(x, y);
+          } else {
+            this.addCell(x, y);
+          }
+          this.updateHUD();
+        }
+
+        // Shape patterns (same as before)
         getShapePattern(shapeName) {
           const patterns = {
             block: [
@@ -756,13 +466,11 @@
               [0, 1],
               [1, 1],
             ],
-
             blinker: [
               [0, 0],
               [1, 0],
               [2, 0],
             ],
-
             glider: [
               [1, 0],
               [2, 1],
@@ -770,7 +478,6 @@
               [1, 2],
               [2, 2],
             ],
-
             beacon: [
               [0, 0],
               [1, 0],
@@ -779,7 +486,6 @@
               [3, 2],
               [3, 3],
             ],
-
             toad: [
               [1, 0],
               [2, 0],
@@ -788,9 +494,7 @@
               [1, 1],
               [2, 1],
             ],
-
             pulsar: [
-              // Top section
               [2, 0],
               [3, 0],
               [4, 0],
@@ -815,7 +519,6 @@
               [8, 5],
               [9, 5],
               [10, 5],
-              // Middle gap at y=6
               [2, 7],
               [3, 7],
               [4, 7],
@@ -841,82 +544,17 @@
               [9, 12],
               [10, 12],
             ],
-
-            pentadecathlon: [
-              [0, 1],
-              [1, 1],
-              [2, 1],
-              [3, 1],
-              [4, 1],
-              [5, 1],
-              [6, 1],
-              [7, 1],
-              [1, 0],
-              [6, 0],
-              [1, 2],
-              [6, 2],
-            ],
-
-            gospergun: [
-              // Left square
-              [0, 4],
-              [0, 5],
-              [1, 4],
-              [1, 5],
-              // Left circle
-              [10, 4],
-              [10, 5],
-              [10, 6],
-              [11, 3],
-              [11, 7],
-              [12, 2],
-              [12, 8],
-              [13, 2],
-              [13, 8],
-              [14, 5],
-              [15, 3],
-              [15, 7],
-              [16, 4],
-              [16, 5],
-              [16, 6],
-              [17, 5],
-              // Right structures
-              [20, 2],
-              [20, 3],
-              [20, 4],
-              [21, 2],
-              [21, 3],
-              [21, 4],
-              [22, 1],
-              [22, 5],
-              [24, 0],
-              [24, 1],
-              [24, 5],
-              [24, 6],
-              // Right square
-              [34, 2],
-              [34, 3],
-              [35, 2],
-              [35, 3],
-            ],
           };
 
           return patterns[shapeName] || [];
         }
 
-        placeShape(centerX, centerY, shapeName) {
+        async placeShape(centerX, centerY, shapeName) {
           if (shapeName === "clear") {
             this.chunks.clear();
-
-            // Sync clear to Convex
-            if (this.isConnectedToConvex) {
-              this.convexClient.mutation("game:updateChunks", {
-                worldId: this.worldId,
-                chunks: [], // Empty array clears all chunks
-                newGeneration: this.generation,
-              });
+            if (this.isConnected) {
+              await this.convexClient.mutation("gameOfLife:clearWorld");
             }
-
             this.updateHUD();
             this.render();
             return;
@@ -925,7 +563,6 @@
           const pattern = this.getShapePattern(shapeName);
           if (pattern.length === 0) return;
 
-          // Calculate the center offset for the pattern
           const minX = Math.min(...pattern.map(([x, y]) => x));
           const maxX = Math.max(...pattern.map(([x, y]) => x));
           const minY = Math.min(...pattern.map(([x, y]) => y));
@@ -934,52 +571,54 @@
           const offsetX = Math.floor((maxX + minX) / 2);
           const offsetY = Math.floor((maxY + minY) / 2);
 
-          // Track which chunks we're modifying
-          const modifiedChunks = new Set();
-
-          // Place the pattern centered at the click position
           for (const [px, py] of pattern) {
             const worldX = centerX + px - offsetX;
             const worldY = centerY + py - offsetY;
             this.addCell(worldX, worldY);
-
-            const { chunkX, chunkY } = this.getChunkCoords(worldX, worldY);
-            modifiedChunks.add(`${chunkX},${chunkY}`);
           }
 
           this.updateHUD();
           this.render();
         }
 
-        // Convert screen coordinates to world coordinates
-        screenToWorld(screenX, screenY) {
-          const effectiveCellSize = this.CELL_SIZE * this.zoom;
-          const centerX = this.canvas.width / 2;
-          const centerY = this.canvas.height / 2;
-
-          // Convert screen position to world position
-          const worldX = Math.floor(
-            (screenX - centerX) / effectiveCellSize + this.viewportX,
+        // Event handlers (same pattern as before but without local game loop)
+        setupEventListeners() {
+          this.canvas.addEventListener("mousedown", (e) =>
+            this.handleMouseDown(e),
           );
-          const worldY = Math.floor(
-            (screenY - centerY) / effectiveCellSize + this.viewportY,
+          this.canvas.addEventListener("mousemove", (e) =>
+            this.handleMouseMove(e),
           );
+          this.canvas.addEventListener("wheel", (e) => this.handleWheel(e), {
+            passive: false,
+          });
 
-          return [worldX, worldY];
-        }
+          document.addEventListener("mouseup", (e) => this.handleMouseUp(e));
+          document.addEventListener("mousemove", (e) =>
+            this.handleGlobalMouseMove(e),
+          );
+          document.addEventListener("keydown", (e) => this.handleKeyDown(e));
+          document.addEventListener("keyup", (e) => this.handleKeyUp(e));
 
-        // Convert world coordinates to screen coordinates
-        worldToScreen(worldX, worldY) {
-          const effectiveCellSize = this.CELL_SIZE * this.zoom;
-          const centerX = this.canvas.width / 2;
-          const centerY = this.canvas.height / 2;
+          // Shape buttons
+          document.querySelectorAll(".shape-button").forEach((button) => {
+            button.addEventListener("click", (e) => {
+              document
+                .querySelectorAll(".shape-button")
+                .forEach((b) => b.classList.remove("selected"));
+              e.target.classList.add("selected");
+              this.selectedShape = e.target.dataset.shape;
+            });
+          });
 
-          const screenX =
-            (worldX - this.viewportX) * effectiveCellSize + centerX;
-          const screenY =
-            (worldY - this.viewportY) * effectiveCellSize + centerY;
+          window.addEventListener("resize", () => {
+            this.setupCanvas();
+            this.render();
+          });
 
-          return [screenX, screenY];
+          this.canvas.addEventListener("contextmenu", (e) =>
+            e.preventDefault(),
+          );
         }
 
         handleMouseDown(e) {
@@ -990,7 +629,6 @@
           this.isMouseDown = true;
 
           if (e.shiftKey || this.isShiftPressed) {
-            // Start panning
             this.isPanning = true;
             this.canvas.classList.add("panning");
             this.dragStart = {
@@ -1003,19 +641,16 @@
             const [worldX, worldY] = this.screenToWorld(mouseX, mouseY);
 
             if (this.selectedShape === "draw") {
-              // Normal cell toggle mode
               this.lastToggledCell = "";
               this.toggleCell(worldX, worldY);
               this.render();
             } else {
-              // Shape placement mode
               this.placeShape(worldX, worldY, this.selectedShape);
             }
           }
         }
 
         handleMouseMove(e) {
-          // Only allow drawing/painting in draw mode, not when placing shapes
           if (
             !this.isMouseDown ||
             this.isPanning ||
@@ -1023,7 +658,6 @@
           )
             return;
 
-          // Throttle cell painting during drag
           const now = performance.now();
           if (now - this.lastDragUpdate < this.DRAG_THROTTLE_MS) {
             return;
@@ -1041,7 +675,6 @@
 
         handleGlobalMouseMove(e) {
           if (this.isPanning) {
-            // Throttle viewport dragging
             const now = performance.now();
             if (now - this.lastDragUpdate < this.DRAG_THROTTLE_MS) {
               return;
@@ -1051,7 +684,6 @@
             const dx = e.clientX - this.dragStart.x;
             const dy = e.clientY - this.dragStart.y;
 
-            // Convert pixel movement to world movement
             const effectiveCellSize = this.CELL_SIZE * this.zoom;
             const worldDx = -dx / effectiveCellSize;
             const worldDy = -dy / effectiveCellSize;
@@ -1063,7 +695,6 @@
             this.render();
           }
 
-          // Update cursor based on shift key
           if (this.isShiftPressed && !this.isPanning) {
             this.canvas.classList.add("pan-ready");
           } else if (!this.isPanning) {
@@ -1078,13 +709,11 @@
           this.lastDragUpdate = 0;
           this.canvas.classList.remove("panning", "pan-ready");
 
-          // Re-add pan-ready if shift is still pressed
           if (this.isShiftPressed) {
             this.canvas.classList.add("pan-ready");
           }
 
-          // Load new chunks after panning
-          if (this.isConnectedToConvex) {
+          if (this.isConnected) {
             this.loadVisibleChunks();
           }
         }
@@ -1102,14 +731,13 @@
           this.updateHUD();
           this.render();
 
-          // Load new chunks after zoom change
-          if (this.isConnectedToConvex) {
+          if (this.isConnected) {
             this.loadVisibleChunks();
           }
         }
 
         handleKeyDown(e) {
-          const MOVE_SPEED = 5 / this.zoom; // Adjust movement speed based on zoom
+          const MOVE_SPEED = 5 / this.zoom;
 
           if (e.key === "Shift") {
             this.isShiftPressed = true;
@@ -1149,11 +777,11 @@
               break;
             case " ":
               e.preventDefault();
-              this.stepSimulation();
+              this.toggleSimulation();
               break;
-            case "r":
+            case "c":
               e.preventDefault();
-              this.toggleRunning();
+              this.placeShape(0, 0, "clear");
               break;
           }
         }
@@ -1163,7 +791,6 @@
             this.isShiftPressed = false;
             this.canvas.classList.remove("pan-ready");
 
-            // If we're currently panning and shift is released, stop panning
             if (this.isPanning) {
               this.isPanning = false;
               this.canvas.classList.remove("panning");
@@ -1171,188 +798,30 @@
           }
         }
 
-        toggleCell(x, y) {
-          const key = this.cellKey(x, y);
+        async toggleSimulation() {
+          if (!this.isConnected) return;
 
-          // Prevent toggling the same cell multiple times during mouse drag
-          if (this.isMouseDown && this.lastToggledCell === key) {
-            return;
-          }
-
-          this.lastToggledCell = key;
-
-          // Use chunked storage
-          if (this.hasCell(x, y)) {
-            this.removeCell(x, y);
-          } else {
-            this.addCell(x, y);
-          }
-          this.updateHUD();
-        }
-
-        getNeighbors(x, y) {
-          return [
-            [x - 1, y - 1],
-            [x, y - 1],
-            [x + 1, y - 1],
-            [x - 1, y],
-            [x + 1, y],
-            [x - 1, y + 1],
-            [x, y + 1],
-            [x + 1, y + 1],
-          ];
-        }
-
-        getNeighborCounts() {
-          const counts = new Map();
-
-          // Get all living cells and count their neighbors
-          const allCells = this.getAllCells();
-
-          for (const [x, y] of allCells) {
-            for (const [nx, ny] of this.getNeighbors(x, y)) {
-              const neighborKey = this.cellKey(nx, ny);
-              counts.set(neighborKey, (counts.get(neighborKey) || 0) + 1);
-            }
-          }
-
-          return counts;
-        }
-
-        nextGeneration() {
-          const counts = this.getNeighborCounts();
-
-          // Store current state before clearing
-          const currentCells = new Set();
-          for (const [x, y] of this.getAllCells()) {
-            currentCells.add(this.cellKey(x, y));
-          }
-
-          // Clear current chunks
-          this.chunks.clear();
-
-          // Apply Game of Life rules
-          for (const [cellKey, count] of counts) {
-            const [x, y] = this.parseKey(cellKey);
-            const wasAlive = currentCells.has(cellKey);
-
-            // Rule: Cell survives/is born if it has exactly 3 neighbors,
-            // or has 2 neighbors and was already alive
-            if (count === 3 || (count === 2 && wasAlive)) {
-              this.addCell(x, y);
-            }
-          }
-
-          return this.chunks;
-        }
-
-        stepSimulation() {
-          this.chunks = this.nextGeneration();
-          this.generation++;
-
-          // Sync to Convex if connected
-          if (this.isConnectedToConvex) {
-            this.convexClient.mutation("game:updateWorldState", {
-              worldId: this.worldId,
-              generation: this.generation,
-            });
-
-            // Queue all chunks for sync
-            for (const [chunkKey, chunk] of this.chunks) {
-              const [chunkX, chunkY] = chunkKey.split(",").map(Number);
-              this.queueChunkUpdate(chunkX, chunkY);
-            }
-          }
-
-          this.updateHUD();
-          this.render();
-        }
-
-        toggleRunning() {
-          this.isRunning = !this.isRunning;
-
-          // Sync to Convex if connected
-          if (this.isConnectedToConvex) {
-            this.convexClient.mutation("game:updateWorldState", {
-              worldId: this.worldId,
-              isRunning: this.isRunning,
-            });
-          }
-
-          if (this.isRunning) {
-            this.gameInterval = setInterval(() => {
-              this.stepSimulation();
-            }, this.speed);
-          } else {
-            if (this.gameInterval) {
-              clearInterval(this.gameInterval);
-              this.gameInterval = null;
-            }
-          }
-
-          this.updateHUD();
-        }
-
-        updateGameSpeed() {
-          // Sync to Convex if connected
-          if (this.isConnectedToConvex) {
-            this.convexClient.mutation("game:updateWorldState", {
-              worldId: this.worldId,
-              speed: this.speed,
-            });
-          }
-
-          // Update the interval if the game is currently running
-          if (this.isRunning) {
-            if (this.gameInterval) {
-              clearInterval(this.gameInterval);
-            }
-            this.gameInterval = setInterval(() => {
-              this.stepSimulation();
-            }, this.speed);
+          try {
+            const newState = await this.convexClient.mutation(
+              "gameOfLife:toggleSimulation",
+            );
+            console.log("Simulation toggled:", newState);
+          } catch (error) {
+            console.error("Failed to toggle simulation:", error);
           }
         }
 
-        initializeWorld() {
-          // Add some initial patterns using the new chunked system
-          const initialCells = [
-            // Glider
-            [10, 10],
-            [11, 11],
-            [12, 9],
-            [12, 10],
-            [12, 11],
-            // Block
-            [20, 20],
-            [21, 20],
-            [20, 21],
-            [21, 21],
-            // Blinker
-            [30, 15],
-            [31, 15],
-            [32, 15],
-          ];
-
-          for (const [x, y] of initialCells) {
-            this.addCell(x, y);
-          }
-
-          this.updateHUD();
-        }
-
-        // Get chunks that are visible in current viewport
+        // Get visible chunks for rendering
         getVisibleChunks() {
           const effectiveCellSize = this.CELL_SIZE * this.zoom;
           const centerX = this.canvas.width / 2;
           const centerY = this.canvas.height / 2;
 
-          // Calculate world bounds of viewport
           const leftBound = this.viewportX - centerX / effectiveCellSize;
           const rightBound = this.viewportX + centerX / effectiveCellSize;
           const topBound = this.viewportY - centerY / effectiveCellSize;
           const bottomBound = this.viewportY + centerY / effectiveCellSize;
 
-          // Calculate chunk bounds
           const minChunkX = Math.floor(leftBound / this.CHUNK_SIZE);
           const maxChunkX = Math.floor(rightBound / this.CHUNK_SIZE);
           const minChunkY = Math.floor(topBound / this.CHUNK_SIZE);
@@ -1380,11 +849,9 @@
         render() {
           const effectiveCellSize = this.CELL_SIZE * this.zoom;
 
-          // Clear canvas
           this.ctx.fillStyle = "#ffffff";
           this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
-          // Calculate visible world bounds
           const centerX = this.canvas.width / 2;
           const centerY = this.canvas.height / 2;
 
@@ -1444,7 +911,6 @@
               const worldX = chunkX * this.CHUNK_SIZE + localX;
               const worldY = chunkY * this.CHUNK_SIZE + localY;
 
-              // Double-check if cell is in viewport (should be, but safety check)
               if (
                 worldX >= leftBound &&
                 worldX <= rightBound &&
@@ -1471,14 +937,44 @@
             }
           }
 
-          // Update visible cell count
           document.getElementById("visibleCells").textContent = visibleCells;
+        }
+
+        startPerformanceMonitoring() {
+          const trackPerformance = () => {
+            this.frameCount++;
+            const now = performance.now();
+
+            if (now - this.lastFpsTime >= 1000) {
+              this.fps = this.frameCount;
+              this.frameCount = 0;
+              this.lastFpsTime = now;
+              this.updatePerformanceHUD();
+            }
+
+            this.rafId = requestAnimationFrame(trackPerformance);
+          };
+
+          trackPerformance();
+        }
+
+        updatePerformanceHUD() {
+          document.getElementById("fps").textContent = this.fps;
+
+          if (performance.memory) {
+            const memoryMB = Math.round(
+              performance.memory.usedJSHeapSize / 1024 / 1024,
+            );
+            document.getElementById("memory").textContent = `${memoryMB}MB`;
+            document.getElementById("memory").style.color = "#3b82f6";
+          } else {
+            document.getElementById("memory").textContent = "N/A";
+            document.getElementById("memory").style.color = "#6b7280";
+          }
         }
 
         updateHUD() {
           document.getElementById("generation").textContent = this.generation;
-          document.getElementById("totalCells").textContent =
-            this.getTotalCellCount();
           document.getElementById("totalChunks").textContent = this.chunks.size;
           document.getElementById("zoom").textContent = this.zoom.toFixed(1);
           document.getElementById("viewportX").textContent =
@@ -1487,20 +983,35 @@
             Math.round(this.viewportY * 10) / 10;
           document.getElementById("status").textContent = this.isRunning
             ? "RUNNING"
-            : "PAUSED";
+            : "STOPPED";
           document.getElementById("status").style.color = this.isRunning
             ? "#059669"
             : "#6b7280";
 
-          // Also update performance metrics when other HUD elements update
           this.updatePerformanceHUD();
+        }
+
+        cleanup() {
+          if (this.rafId) {
+            cancelAnimationFrame(this.rafId);
+            this.rafId = null;
+          }
+
+          if (this.syncInterval) {
+            clearInterval(this.syncInterval);
+            this.syncInterval = null;
+          }
+
+          if (this.convexClient) {
+            this.convexClient.close();
+          }
         }
       }
 
       // Initialize the game
-      const game = new GameOfLife();
+      const game = new ServerTickGameOfLife();
 
-      // Cleanup on page unload to prevent memory leaks
+      // Cleanup on page unload
       window.addEventListener("beforeunload", () => {
         game.cleanup();
       });

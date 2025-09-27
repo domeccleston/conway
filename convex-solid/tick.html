@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Server Tick Counter</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 40px;
+        background: #f3f4f6;
+        font-family: "Courier New", monospace;
+      }
+
+      .container {
+        max-width: 600px;
+        margin: 0 auto;
+        background: white;
+        padding: 30px;
+        border-radius: 8px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      }
+
+      .title {
+        font-size: 24px;
+        font-weight: bold;
+        margin-bottom: 20px;
+        text-align: center;
+      }
+
+      .counter-display {
+        font-size: 48px;
+        font-weight: bold;
+        text-align: center;
+        margin: 40px 0;
+        color: #3b82f6;
+      }
+
+      .controls {
+        display: flex;
+        gap: 15px;
+        justify-content: center;
+        margin: 20px 0;
+      }
+
+      button {
+        background: #3b82f6;
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 5px;
+        cursor: pointer;
+        font-size: 16px;
+        font-family: inherit;
+      }
+
+      button:hover {
+        background: #2563eb;
+      }
+
+      button:disabled {
+        background: #9ca3af;
+        cursor: not-allowed;
+      }
+
+      .status {
+        text-align: center;
+        margin: 20px 0;
+        font-size: 14px;
+        color: #6b7280;
+      }
+
+      .connection-status {
+        padding: 8px 12px;
+        border-radius: 4px;
+        font-weight: bold;
+        margin-top: 20px;
+      }
+
+      .connected {
+        background: #d1fae5;
+        color: #065f46;
+      }
+
+      .disconnected {
+        background: #fee2e2;
+        color: #991b1b;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="title">Server Tick Counter</div>
+
+      <div class="counter-display" id="counterDisplay">0</div>
+
+      <div class="controls">
+        <button id="startBtn">Start Counter</button>
+        <button id="stopBtn" disabled>Stop Counter</button>
+        <button id="resetBtn">Reset</button>
+      </div>
+
+      <div class="status">
+        Counter Status: <span id="counterStatus">Stopped</span>
+      </div>
+
+      <div class="connection-status disconnected" id="connectionStatus">
+        Connecting to Convex...
+      </div>
+    </div>
+
+    <!-- Convex Integration -->
+    <script src="https://unpkg.com/convex@1.3.1/dist/browser.bundle.js"></script>
+    <script>
+      class TickCounter {
+        constructor() {
+          this.convexClient = null;
+          this.counterId = null;
+          this.isConnected = false;
+
+          this.initializeConvex();
+          this.setupEventListeners();
+        }
+
+        async initializeConvex() {
+          try {
+            // Wait for convex to be available
+            while (typeof convex === "undefined") {
+              await new Promise((resolve) => setTimeout(resolve, 100));
+            }
+
+            const CONVEX_URL = "https://trustworthy-gnu-78.convex.cloud";
+            this.convexClient = new convex.ConvexClient(CONVEX_URL);
+
+            // Create a new counter
+            this.counterId = await this.convexClient.mutation(
+              "tick:createCounter",
+              {
+                name: `Counter-${Date.now()}`,
+              },
+            );
+
+            console.log("Created counter:", this.counterId);
+            this.isConnected = true;
+            this.updateConnectionStatus("Connected to Convex", true);
+
+            // Subscribe to counter updates
+            this.convexClient.onUpdate(
+              "tick:getCounter",
+              { counterId: this.counterId },
+              (counter) => {
+                if (counter) {
+                  this.updateDisplay(counter);
+                }
+              },
+            );
+          } catch (error) {
+            console.error("Failed to initialize Convex:", error);
+            this.updateConnectionStatus("Connection Error", false);
+          }
+        }
+
+        setupEventListeners() {
+          document.getElementById("startBtn").addEventListener("click", () => {
+            this.startCounter();
+          });
+
+          document.getElementById("stopBtn").addEventListener("click", () => {
+            this.stopCounter();
+          });
+
+          document.getElementById("resetBtn").addEventListener("click", () => {
+            this.resetCounter();
+          });
+        }
+
+        async startCounter() {
+          if (!this.isConnected) return;
+
+          try {
+            await this.convexClient.mutation("tick:startCounter", {
+              counterId: this.counterId,
+            });
+          } catch (error) {
+            console.error("Failed to start counter:", error);
+          }
+        }
+
+        async stopCounter() {
+          if (!this.isConnected) return;
+
+          try {
+            await this.convexClient.mutation("tick:stopCounter", {
+              counterId: this.counterId,
+            });
+          } catch (error) {
+            console.error("Failed to stop counter:", error);
+          }
+        }
+
+        async resetCounter() {
+          if (!this.isConnected) return;
+
+          try {
+            await this.convexClient.mutation("tick:resetCounter", {
+              counterId: this.counterId,
+            });
+          } catch (error) {
+            console.error("Failed to reset counter:", error);
+          }
+        }
+
+        updateDisplay(counter) {
+          document.getElementById("counterDisplay").textContent = counter.count;
+          document.getElementById("counterStatus").textContent =
+            counter.isRunning ? "Running" : "Stopped";
+
+          // Update button states
+          document.getElementById("startBtn").disabled = counter.isRunning;
+          document.getElementById("stopBtn").disabled = !counter.isRunning;
+        }
+
+        updateConnectionStatus(message, connected) {
+          const statusEl = document.getElementById("connectionStatus");
+          statusEl.textContent = message;
+          statusEl.className = `connection-status ${connected ? "connected" : "disconnected"}`;
+        }
+      }
+
+      // Initialize the counter
+      const tickCounter = new TickCounter();
+    </script>
+  </body>
+</html>
